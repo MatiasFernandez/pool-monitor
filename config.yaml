@@ -1,0 +1,117 @@
+substitutions:
+  run_duration: 10s
+
+esphome:
+  name: pool-monitor
+  friendly_name: "Pool Monitor"
+  platformio_options:
+    build_flags: -DBOARD_HAS_PSRAM
+    board_build.arduino.memory_type: qio_opi
+    board_build.f_flash: 80000000L
+    board_build.flash_mode: qio 
+  on_boot:
+    - priority: 650
+      then:
+        - logger.log: "Turning ON DS18B20 power"
+        - output.turn_on: ds18b20_power
+        - logger.log: "Waiting 100ms for DS18B20 to stabilize"
+        - delay: 100ms
+  on_shutdown:
+    then:
+      - output.turn_off: ds18b20_power
+esp32:
+  variant: esp32s3
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: ${run_duration}
+  sleep_duration: 15min
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 10.1.2.6
+    gateway: 10.1.2.1
+    subnet: 255.255.255.0
+  fast_connect: true
+
+safe_mode:
+  disabled: true
+
+switch:
+  - platform: homeassistant
+    id: stay_awake 
+    name: Stay awake toggle
+    entity_id: input_boolean.pool_monitor_stay_awake
+    on_turn_on:
+      - logger.log:
+          format: "**********  stay_awake  switch turned ON  ! *****  stay_awake=%s, prevent deep_sleep "
+          args: [ 'id(stay_awake).state ? "true" : "false"' ]
+      - deep_sleep.prevent: deep_sleep_1
+    on_turn_off:
+      - logger.log:
+          format: "**********  stay_awake  switch turned OFF ! *****  stay_awake=%s, allow deep_sleep "
+          args: [ 'id(stay_awake).state ? "true" : "false"' ]
+      - deep_sleep.allow: deep_sleep_1
+
+output:
+  - platform: gpio
+    pin: GPIO06 # Pin controlling DS18B20 VCC/Pull-up
+    id: ds18b20_power
+
+one_wire:
+  - platform: gpio
+    pin: GPIO05
+
+sensor:
+  - platform: dallas_temp
+    name: "Water Temperature"
+    id: water_temperature
+    icon: "mdi:pool-thermometer"
+    device_class: "temperature"
+    state_class: "measurement"
+    resolution: 9
+    update_interval: ${run_duration}
+    on_value:
+      then:
+        - logger.log:
+            format: "[%ld ms] Water Temperature: %.2f °C"
+            args: [ 'millis()', 'id(water_temperature).state' ]
+
+  - platform: adc
+    pin: GPIO02
+    name: "Battery Voltage"
+    id: battery_voltage
+    icon: "mdi:battery"
+    device_class: "voltage"
+    state_class: "measurement"
+    update_interval: ${run_duration}
+    attenuation: 12db
+    samples: 64
+    filters:
+      - multiply: 1.470  # Voltage divider: (R1 + R2) / R2 = (220.3 + 468.6) / 468.6 = 1.470
+    on_value:
+      then:
+        - logger.log:
+            format: "[%ld ms] Battery Voltage: %.2f V"
+            args: [ 'millis()', 'id(battery_voltage).state' ]
+
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: ${run_duration}
+
+
