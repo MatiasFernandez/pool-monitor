@@ -84,7 +84,8 @@ sensor:
     icon: "mdi:pool-thermometer"
     device_class: "temperature"
     state_class: "measurement"
-    resolution: 9
+    resolution: 11
+    accuracy_decimals: 3
     update_interval: ${run_duration}
     filters:
     # Skip erroneous power-on readings. Ideally no invalid readings should occur,
