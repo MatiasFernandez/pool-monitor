@@ -86,6 +86,10 @@ sensor:
     state_class: "measurement"
     resolution: 9
     update_interval: ${run_duration}
+    filters:
+    # Skip erroneous power-on readings. Ideally no invalid readings should occur,
+    # but until I figure out the cause, I prefer not registering them in Home Assistant.
+      - filter_out: 85.0 
     on_value:
       then:
         - logger.log:
